@@ -31,7 +31,7 @@
 | Сборка только через GitHub Actions          | [classroom.yml](.github/workflows/classroom.yml)                    |
 | Деплой средствами Actions, без CLI и webhook | шаг `Deploy to Render` — `POST` на Render Deploy Hook через `curl`  |
 | Деплой через Docker                         | Render собирает и запускает [Dockerfile](Dockerfile)                |
-| БД для хранения записей                     | Postgres (локально — docker compose, на Render — managed Postgres)  |
+| БД для хранения записей                     | Postgres (локально — docker compose, в облаке — managed Postgres)   |
 | Интеграционные тесты после деплоя           | `newman` по postman-коллекции против задеплоенного URL              |
 
 ### Стек
@@ -75,7 +75,7 @@ DATABASE_URL="postgresql+psycopg://program:test@localhost:5432/persons" .venv/bi
 
 ### Тесты
 
-Unit-тесты (9 штук, изолированная in-memory БД на каждый тест):
+Unit-тесты (12 штук, изолированная in-memory БД на каждый тест):
 
 ```shell
 pytest
@@ -90,12 +90,14 @@ npx newman run "postman/[inst] Lab1.postman_collection.json" \
 
 ### Настройка деплоя на Render
 
-1. В Render создать Blueprint из [render.yaml](render.yaml) (web-сервис из Dockerfile + бесплатный Postgres) либо
-   завести Web Service вручную: `Runtime: Docker`, `Health Check Path: /manage/health`, `Auto-Deploy: Off`,
-   переменная `DATABASE_URL` — из созданной базы (`Internal Database URL`).
-2. В настройках сервиса `Settings` → `Deploy Hook` скопировать URL и положить его в secret репозитория
+1. Завести бесплатную БД в [Neon](https://neon.com) (free tier, карта не требуется) и скопировать connection
+   string вида `postgresql://user:pass@host/persons?sslmode=require`.
+2. В Render создать Blueprint из [render.yaml](render.yaml) либо завести Web Service вручную:
+   `Runtime: Docker`, `Health Check Path: /manage/health`, `Auto-Deploy: Off`, переменная `DATABASE_URL` — строка
+   подключения из п.1.
+3. В настройках сервиса `Settings` → `Deploy Hook` скопировать URL и положить его в secret репозитория
    `RENDER_DEPLOY_HOOK` (`Settings` → `Secrets and variables` → `Actions`).
-3. В [[inst][heroku] Lab1.postman_environment.json](postman/%5Binst%5D%5Bheroku%5D%20Lab1.postman_environment.json)
+4. В [[inst][heroku] Lab1.postman_environment.json](postman/%5Binst%5D%5Bheroku%5D%20Lab1.postman_environment.json)
    заменить `baseUrl` на адрес сервиса на Render (например `https://person-service.onrender.com`).
 
 Схема `postgres://...`, которую отдаёт Render, приводится к драйверу psycopg 3 в

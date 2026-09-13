@@ -1,5 +1,7 @@
-# Blueprint для Render: web-сервис из Dockerfile + бесплатный Postgres.
+# Blueprint для Render: web-сервис из Dockerfile.
 # Автодеплой по push выключен: выкатку инициирует GitHub Actions через Deploy Hook.
+# DATABASE_URL задаётся в дашборде (sync: false) — подойдёт любой внешний Postgres,
+# например бесплатный Neon: postgresql://user:pass@host/persons?sslmode=require
 services:
   - type: web
     name: person-service
@@ -11,12 +13,4 @@ services:
     autoDeploy: false
     envVars:
       - key: DATABASE_URL
-        fromDatabase:
-          name: persons-db
-          property: connectionString
-
-databases:
-  - name: persons-db
-    plan: free
-    databaseName: persons
-    user: program
+        sync: false
