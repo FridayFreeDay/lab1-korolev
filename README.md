@@ -75,7 +75,7 @@ DATABASE_URL="postgresql+psycopg://program:test@localhost:5432/persons" .venv/bi
 
 ### Тесты
 
-Unit-тесты (12 штук, изолированная in-memory БД на каждый тест):
+Unit-тесты (15 штук, изолированная in-memory БД на каждый тест):
 
 ```shell
 pytest
