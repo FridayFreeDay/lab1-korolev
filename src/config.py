@@ -1,5 +1,5 @@
 """Конфигурация приложения из переменных окружения."""
-from pydantic import AliasChoices, Field, field_validator
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 DEFAULT_DATABASE_URL = "postgresql+psycopg://program:test@localhost:5432/persons"
@@ -28,14 +28,10 @@ class Settings(BaseSettings):
 
     database_url: str = DEFAULT_DATABASE_URL
     port: int = DEFAULT_PORT
-    # Платформа деплоя прокидывает sha выкаченного коммита: Render — в
-    # RENDER_GIT_COMMIT, Railway — в RAILWAY_GIT_COMMIT_SHA. CI по нему понимает,
-    # что поднялась именно текущая версия, а не предыдущая.
+    # Railway прокидывает sha выкаченного коммита в RAILWAY_GIT_COMMIT_SHA.
+    # CI по нему понимает, что поднялась именно текущая версия, а не предыдущая.
     git_commit: str = Field(
-        default=UNKNOWN_COMMIT,
-        validation_alias=AliasChoices(
-            "RENDER_GIT_COMMIT", "RAILWAY_GIT_COMMIT_SHA", "GIT_COMMIT"
-        ),
+        default=UNKNOWN_COMMIT, validation_alias="RAILWAY_GIT_COMMIT_SHA"
     )
 
     @field_validator("database_url")

@@ -29,20 +29,27 @@ def test_normalize_database_url(source, expected):
     assert result == expected
 
 
-@pytest.mark.parametrize(
-    "env_name",
-    ["RENDER_GIT_COMMIT", "RAILWAY_GIT_COMMIT_SHA", "GIT_COMMIT"],
-)
-def test_git_commit_read_from_platform_env(monkeypatch, env_name):
+def test_git_commit_read_from_railway_env(monkeypatch):
     # Arrange
     from src.config import Settings
 
-    for name in ("RENDER_GIT_COMMIT", "RAILWAY_GIT_COMMIT_SHA", "GIT_COMMIT"):
-        monkeypatch.delenv(name, raising=False)
-    monkeypatch.setenv(env_name, "abc123")
+    monkeypatch.setenv("RAILWAY_GIT_COMMIT_SHA", "abc123")
 
     # Act
     settings = Settings(_env_file=None)
 
     # Assert
     assert settings.git_commit == "abc123"
+
+
+def test_git_commit_defaults_to_unknown(monkeypatch):
+    # Arrange
+    from src.config import UNKNOWN_COMMIT, Settings
+
+    monkeypatch.delenv("RAILWAY_GIT_COMMIT_SHA", raising=False)
+
+    # Act
+    settings = Settings(_env_file=None)
+
+    # Assert
+    assert settings.git_commit == UNKNOWN_COMMIT

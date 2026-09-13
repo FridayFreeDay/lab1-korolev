@@ -24,14 +24,14 @@
 ### Отступление от исходного задания
 
 В исходной формулировке деплой выполняется на Heroku. Heroku убрал Free Plan и недоступен для регистрации из РФ,
-поэтому по согласованию с преподавателем целевой платформой выбран **Render**. Суть задания сохранена полностью:
+поэтому по согласованию с преподавателем целевой платформой выбран **Railway**. Суть задания сохранена полностью:
 
 | Требование задания                          | Реализация                                                         |
 |---------------------------------------------|--------------------------------------------------------------------|
 | Сборка только через GitHub Actions          | [classroom.yml](.github/workflows/classroom.yml)                    |
-| Деплой средствами Actions, без CLI и webhook | шаг `Deploy to Render` — `POST` на Render Deploy Hook через `curl`  |
-| Деплой через Docker                         | Render собирает и запускает [Dockerfile](Dockerfile)                |
-| БД для хранения записей                     | Postgres (локально — docker compose, в облаке — managed Postgres)   |
+| Деплой средствами Actions, без CLI и webhook | шаг `Deploy to Railway` — GraphQL-мутация к Public API через `curl` |
+| Деплой через Docker                         | Railway собирает и запускает [Dockerfile](Dockerfile)               |
+| БД для хранения записей                     | Postgres (локально — docker compose, в облаке — Railway Postgres)   |
 | Интеграционные тесты после деплоя           | `newman` по postman-коллекции против задеплоенного URL              |
 
 ### Стек
@@ -39,7 +39,7 @@
 * Python 3.12, FastAPI, SQLAlchemy 2.0 (psycopg 3)
 * Postgres 13
 * pytest для unit-тестов, newman для интеграционных
-* Docker, GitHub Actions, Render
+* Docker, GitHub Actions, Railway
 
 ### Структура проекта
 
@@ -75,7 +75,7 @@ DATABASE_URL="postgresql+psycopg://program:test@localhost:5432/persons" .venv/bi
 
 ### Тесты
 
-Unit-тесты (15 штук, изолированная in-memory БД на каждый тест):
+Unit-тесты (14 штук, изолированная in-memory БД на каждый тест):
 
 ```shell
 pytest
@@ -88,30 +88,38 @@ npx newman run "postman/[inst] Lab1.postman_collection.json" \
   -e "postman/[inst][local] Lab1.postman_environment.json" --delay-request 100
 ```
 
-### Настройка деплоя на Render
+### Настройка деплоя на Railway
 
-1. Завести бесплатную БД в [Neon](https://neon.com) (free tier, карта не требуется) и скопировать connection
-   string вида `postgresql://user:pass@host/persons?sslmode=require`.
-2. В Render создать Blueprint из [render.yaml](render.yaml) либо завести Web Service вручную:
-   `Runtime: Docker`, `Health Check Path: /manage/health`, `Auto-Deploy: Off`, переменная `DATABASE_URL` — строка
-   подключения из п.1.
-3. В настройках сервиса `Settings` → `Deploy Hook` скопировать URL и положить его в secret репозитория
-   `RENDER_DEPLOY_HOOK` (`Settings` → `Secrets and variables` → `Actions`).
-4. В [[inst][heroku] Lab1.postman_environment.json](postman/%5Binst%5D%5Bheroku%5D%20Lab1.postman_environment.json)
-   заменить `baseUrl` на адрес сервиса на Render (например `https://person-service.onrender.com`).
+1. Создать проект: **New Project** → **Deploy from GitHub repo** → этот репозиторий. Railway найдёт `Dockerfile`
+   и соберёт образ из него.
+2. В проект добавить базу: **New** → **Database** → **Add PostgreSQL**.
+3. В сервисе приложения на вкладке **Variables** задать `DATABASE_URL` со ссылкой на переменную базы:
+   `${{Postgres.DATABASE_URL}}`. Схему `postgresql://...` код сам приводит к драйверу psycopg 3, править руками
+   ничего не нужно.
+4. **Settings** → **Networking** → **Generate Domain**: без этого у сервиса нет публичного адреса.
+5. **Settings** → **Deploys** → выключить autodeploy, иначе Railway будет катить по каждому push мимо пайплайна.
+6. Завести secrets репозитория (`Settings` → `Secrets and variables` → `Actions`):
 
-Схема `postgres://...`, которую отдаёт Render, приводится к драйверу psycopg 3 в
-[config.py](src/config.py) — отдельной правки переменной не требуется.
+   | Secret                   | Где взять                                                                        |
+   |--------------------------|----------------------------------------------------------------------------------|
+   | `RAILWAY_API_TOKEN`      | Account Settings → Tokens → Create Token (account-токен, начинается с `token_`)   |
+   | `RAILWAY_PROJECT_ID`     | из URL проекта: `railway.com/project/<projectId>`                                 |
+   | `RAILWAY_SERVICE_ID`     | из URL сервиса: `.../service/<serviceId>`                                         |
+   | `RAILWAY_ENVIRONMENT_ID` | из query-параметра URL: `?environmentId=<environmentId>`                          |
+
+7. В [[inst][heroku] Lab1.postman_environment.json](postman/%5Binst%5D%5Bheroku%5D%20Lab1.postman_environment.json)
+   заменить `baseUrl` на выданный Railway домен (например `https://person-service-production.up.railway.app`).
 
 ### Как работает pipeline
 
 1. `checkout` → установка зависимостей → `pytest` (unit-тесты).
 2. `docker build` — проверка, что образ собирается.
-3. `Deploy to Render` — `POST` на Deploy Hook (только при push в `master`).
+3. `Deploy to Railway` — мутация `environmentTriggersDeploy` к Public API Railway обычным `curl` (только при
+   push в `master`). CLI не используется.
 4. `Wait for deployed service` — поллинг `/manage/health` до тех пор, пока сервис не вернёт sha текущего коммита
-   (Render прокидывает его в `RENDER_GIT_COMMIT`). Так newman гарантированно бьёт по новой версии, а не по старой.
+   (Railway прокидывает его в `RAILWAY_GIT_COMMIT_SHA`). Так newman гарантированно бьёт по новой версии,
+   а не по старой.
 5. `Run API Tests` — newman по postman-коллекции.
 6. `Autograding` + отметка в google-таблице.
 
-Бесплатный план Render усыпляет сервис при простое, холодный старт занимает до минуты — таймаут ожидания в CI
-выставлен в 10 минут.
+Сборка образа и выкатка на Railway занимают несколько минут — таймаут ожидания в CI выставлен в 10 минут.
