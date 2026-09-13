@@ -1,0 +1,22 @@
+# Blueprint для Render: web-сервис из Dockerfile + бесплатный Postgres.
+# Автодеплой по push выключен: выкатку инициирует GitHub Actions через Deploy Hook.
+services:
+  - type: web
+    name: person-service
+    runtime: docker
+    plan: free
+    region: frankfurt
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /manage/health
+    autoDeploy: false
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: persons-db
+          property: connectionString
+
+databases:
+  - name: persons-db
+    plan: free
+    databaseName: persons
+    user: program

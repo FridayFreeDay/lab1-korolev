@@ -1,4 +1,5 @@
 name: GitHub Classroom Workflow
+
 on:
   push:
     branches:
@@ -6,16 +7,90 @@ on:
   pull_request:
     branches:
       - master
+
+env:
+  PYTHON_VERSION: "3.12"
+  IMAGE_NAME: person-service
+  POSTMAN_ENVIRONMENT: "postman/[inst][heroku] Lab1.postman_environment.json"
+  HEALTH_PATH: "/manage/health"
+  HEALTH_TIMEOUT_SECONDS: "600"
+  HEALTH_INTERVAL_SECONDS: "10"
+
 jobs:
   build:
     name: Autograding
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
-      # TODO build, test and deploy project
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+
+      - name: Install dependencies
+        run: pip install --no-cache-dir -r requirements-dev.txt
+
+      - name: Run unit tests
+        run: pytest
+
+      - name: Build Docker image
+        run: docker build -t "${IMAGE_NAME}:${GITHUB_SHA}" .
+
+      - name: Read service base url
+        id: service
+        run: |
+          base_url=$(jq -r '.values[] | select(.key == "baseUrl") | .value' "${POSTMAN_ENVIRONMENT}")
+          if [ -z "${base_url}" ] || [ "${base_url}" = "null" ]; then
+            echo "::error::baseUrl не заполнен в ${POSTMAN_ENVIRONMENT}"
+            exit 1
+          fi
+          echo "base_url=${base_url%/}" >> "${GITHUB_OUTPUT}"
+
+      - name: Deploy to Render
+        if: github.event_name == 'push'
+        run: |
+          if [ -z "${RENDER_DEPLOY_HOOK}" ]; then
+            echo "::error::Не задан secret RENDER_DEPLOY_HOOK"
+            exit 1
+          fi
+          curl --fail --silent --show-error --request POST "${RENDER_DEPLOY_HOOK}" --output /dev/null
+        env:
+          RENDER_DEPLOY_HOOK: ${{ secrets.RENDER_DEPLOY_HOOK }}
+
+      - name: Wait for deployed service
+        env:
+          BASE_URL: ${{ steps.service.outputs.base_url }}
+          EXPECTED_COMMIT: ${{ github.event_name == 'push' && github.sha || '' }}
+        run: |
+          health_url="${BASE_URL}${HEALTH_PATH}"
+          deadline=$(( $(date +%s) + HEALTH_TIMEOUT_SECONDS ))
+          while true; do
+            body=$(curl --fail --silent --max-time 15 "${health_url}" || true)
+            if [ -n "${body}" ]; then
+              if [ -z "${EXPECTED_COMMIT}" ]; then
+                echo "Сервис доступен: ${body}"
+                break
+              fi
+              deployed_commit=$(echo "${body}" | jq -r '.commit // ""')
+              if [ "${deployed_commit}" = "${EXPECTED_COMMIT}" ]; then
+                echo "Задеплоен коммит ${deployed_commit}"
+                break
+              fi
+              echo "Задеплоен ${deployed_commit:-<неизвестно>}, ждём ${EXPECTED_COMMIT}"
+            else
+              echo "Сервис ещё недоступен: ${health_url}"
+            fi
+            if [ "$(date +%s)" -ge "${deadline}" ]; then
+              echo "::error::Сервис не поднялся за ${HEALTH_TIMEOUT_SECONDS}s"
+              exit 1
+            fi
+            sleep "${HEALTH_INTERVAL_SECONDS}"
+          done
 
       - name: Run API Tests
         uses: matt-ball/newman-action@master

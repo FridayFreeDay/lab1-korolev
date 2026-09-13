@@ -6,56 +6,110 @@
 
 ### Формулировка
 
-В рамках первой лабораторной работы требуется написать простейшее веб приложение, предоставляющее пользователю набор
-операций над сущностью Person. Для этого приложения автоматизировать процесс сборки, тестирования и релиза на Heroku.
+Простейшее веб-приложение с набором операций над сущностью `Person`, для которого автоматизирован процесс сборки,
+тестирования и релиза.
 
-Приложение должно реализовать API:
+Приложение реализует API:
 
-* `GET /persons/{personId}` – информация о человеке;
-* `GET /persons` – информация по всем людям;
-* `POST /persons` – создание новой записи о человеке;
-* `PATCH /persons/{personId}` – обновление существующей записи о человеке;
-* `DELETE /persons/{personId}` – удаление записи о человеке.
+* `GET /api/v1/persons/{personId}` – информация о человеке;
+* `GET /api/v1/persons` – информация по всем людям;
+* `POST /api/v1/persons` – создание новой записи о человеке;
+* `PATCH /api/v1/persons/{personId}` – обновление существующей записи о человеке;
+* `DELETE /api/v1/persons/{personId}` – удаление записи о человеке.
 
 [Описание API](person-service.yaml) в формате OpenAPI.
 
-### Требования
+Дополнительно: `GET /manage/health` – проверка живости сервиса (используется платформой деплоя и CI).
 
-* Исходный проект хранится на Github. Для сборки использовать
-  _только_ [Github Actions](https://docs.github.com/en/actions).
-* Запросы / ответы должны быть в формате JSON.
-* Если запись по id не найдена, то возвращать HTTP статус 404 Not Found.
-* При создании новой записи о человека (метод POST /person) возвращать HTTP статус 201 Created с пустым телом и
-  Header `Location: /api/v1/persons/{personId}`, где `personId` – id созданной записи.
-* Приложение должно содержать 4-5 unit-тестов на реализованные операции.
-* Приложение должно быть завернуто в Docker.
-* Деплой на Heroku реализовать средствами GitHub Actions, для деплоя использовать docker. Для деплоя _нельзя_
-  использовать Heroku CLI или webhooks.
-* В [build.yml](.github/workflows/classroom.yml) дописать шаги на сборку, прогон unit-тестов и деплой на Heroku.
-* Приложение должно использовать БД для хранения записей.
-* В [[inst][heroku] Lab1.postman_environment.json](postman/%5Binst%5D%5Bheroku%5D%20Lab1.postman_environment.json)
-  заменить значение `baseUrl` на адрес развернутого сервиса на Heroku.
+### Отступление от исходного задания
 
-### Пояснения
+В исходной формулировке деплой выполняется на Heroku. Heroku убрал Free Plan и недоступен для регистрации из РФ,
+поэтому по согласованию с преподавателем целевой платформой выбран **Render**. Суть задания сохранена полностью:
 
-* [Пример](https://github.com/Romanow/person-service) приложения на Kotlin / Spring.
-* Для локальной разработки можно использовать Postgres в docker, для этого нужно запустить `docker compose up -d`,
-  поднимется контейнер с Postgres 13, будет создана БД `persons` и пользователь `program:test`.
-* После успешного деплоя на Heroku, через newman запускаются интеграционные тесты. Интеграционные тесты можно проверить
-  локально, для этого нужно импортировать в Postman
-  коллекцию [lab1.postman_collection.json](postman/%5Binst%5D%20Lab1.postman_collection.json)]) и
-  environment [[local] lab1.postman_environment.json](postman/%5Binst%5D%5Blocal%5D%20Lab1.postman_environment.json).
-* Для поиска нужного инструмента для сборки используется [Github Marketplace](https://github.com/marketplace).
-* Пояснение как работает [Heroku](https://devcenter.heroku.com/articles/how-heroku-works).
-* Для подключения БД на Heroku заходите через Dashboard в раздел Resources и в блоке `Add-ons` ищете Heroku Postgres.
-  Для получения адреса, пользователя и пароля переходите в саму БД и выбираете раздел `Settings`
-  -> `Database Credentials`.
-* ❗Heroku не позволяет регистрировать новых пользователей, поэтому для регистрации используйте VPN.
+| Требование задания                          | Реализация                                                         |
+|---------------------------------------------|--------------------------------------------------------------------|
+| Сборка только через GitHub Actions          | [classroom.yml](.github/workflows/classroom.yml)                    |
+| Деплой средствами Actions, без CLI и webhook | шаг `Deploy to Render` — `POST` на Render Deploy Hook через `curl`  |
+| Деплой через Docker                         | Render собирает и запускает [Dockerfile](Dockerfile)                |
+| БД для хранения записей                     | Postgres (локально — docker compose, на Render — managed Postgres)  |
+| Интеграционные тесты после деплоя           | `newman` по postman-коллекции против задеплоенного URL              |
 
-### Прием задания
+### Стек
 
-1. При получении задания у вас создается fork этого репозитория для вашего пользователя.
-2. После того как все тесты успешно завершатся, в Github Classroom на Dashboard будет отмечен успешный прогон тестов.
-3. ❗️С конца
-   ноября [Heroku убирает Free Plan](https://help.heroku.com/RSBRUH58/removal-of-heroku-free-product-plans-faq),
-   останутся только платные подписки. В связи с этим, дедлайн по сдаче ЛР #1 10 ноября. 
+* Python 3.12, FastAPI, SQLAlchemy 2.0 (psycopg 3)
+* Postgres 13
+* pytest для unit-тестов, newman для интеграционных
+* Docker, GitHub Actions, Render
+
+### Структура проекта
+
+```
+src/
+├── config.py      # настройки из переменных окружения
+├── database.py    # engine, сессии, инициализация схемы
+├── models.py      # ORM-модель Person
+├── schemas.py     # схемы запросов/ответов по OpenAPI
+├── repository.py  # операции над хранилищем
+├── errors.py      # доменные исключения и обработчики ошибок
+├── router.py      # HTTP-эндпоинты
+└── main.py        # сборка приложения
+tests/             # unit-тесты (pytest, SQLite in-memory)
+```
+
+### Локальный запуск
+
+Весь стек в Docker:
+
+```shell
+docker compose up -d --build
+curl http://localhost:8080/manage/health
+```
+
+Только БД, приложение — локально:
+
+```shell
+docker compose up -d postgres
+python -m venv .venv && .venv/bin/pip install -r requirements-dev.txt
+DATABASE_URL="postgresql+psycopg://program:test@localhost:5432/persons" .venv/bin/python -m src.main
+```
+
+### Тесты
+
+Unit-тесты (9 штук, изолированная in-memory БД на каждый тест):
+
+```shell
+pytest
+```
+
+Интеграционные тесты против локального стека:
+
+```shell
+npx newman run "postman/[inst] Lab1.postman_collection.json" \
+  -e "postman/[inst][local] Lab1.postman_environment.json" --delay-request 100
+```
+
+### Настройка деплоя на Render
+
+1. В Render создать Blueprint из [render.yaml](render.yaml) (web-сервис из Dockerfile + бесплатный Postgres) либо
+   завести Web Service вручную: `Runtime: Docker`, `Health Check Path: /manage/health`, `Auto-Deploy: Off`,
+   переменная `DATABASE_URL` — из созданной базы (`Internal Database URL`).
+2. В настройках сервиса `Settings` → `Deploy Hook` скопировать URL и положить его в secret репозитория
+   `RENDER_DEPLOY_HOOK` (`Settings` → `Secrets and variables` → `Actions`).
+3. В [[inst][heroku] Lab1.postman_environment.json](postman/%5Binst%5D%5Bheroku%5D%20Lab1.postman_environment.json)
+   заменить `baseUrl` на адрес сервиса на Render (например `https://person-service.onrender.com`).
+
+Схема `postgres://...`, которую отдаёт Render, приводится к драйверу psycopg 3 в
+[config.py](src/config.py) — отдельной правки переменной не требуется.
+
+### Как работает pipeline
+
+1. `checkout` → установка зависимостей → `pytest` (unit-тесты).
+2. `docker build` — проверка, что образ собирается.
+3. `Deploy to Render` — `POST` на Deploy Hook (только при push в `master`).
+4. `Wait for deployed service` — поллинг `/manage/health` до тех пор, пока сервис не вернёт sha текущего коммита
+   (Render прокидывает его в `RENDER_GIT_COMMIT`). Так newman гарантированно бьёт по новой версии, а не по старой.
+5. `Run API Tests` — newman по postman-коллекции.
+6. `Autograding` + отметка в google-таблице.
+
+Бесплатный план Render усыпляет сервис при простое, холодный старт занимает до минуты — таймаут ожидания в CI
+выставлен в 10 минут.
