@@ -38,7 +38,7 @@
 
 * Python 3.12, FastAPI, SQLAlchemy 2.0 (psycopg 3)
 * Postgres 13
-* pytest для unit-тестов, newman для интеграционных
+* pytest для unit-тестов (на настоящем Postgres), newman для интеграционных
 * Docker, GitHub Actions, Railway
 
 ### Структура проекта
@@ -53,7 +53,7 @@ src/
 ├── errors.py      # доменные исключения и обработчики ошибок
 ├── router.py      # HTTP-эндпоинты
 └── main.py        # сборка приложения
-tests/             # unit-тесты (pytest, SQLite in-memory)
+tests/             # unit-тесты (pytest поверх Postgres)
 ```
 
 ### Локальный запуск
@@ -75,11 +75,18 @@ DATABASE_URL="postgresql+psycopg://program:test@localhost:5432/persons" .venv/bi
 
 ### Тесты
 
-Unit-тесты (14 штук, изолированная in-memory БД на каждый тест):
+Unit-тесты (14 штук). Им нужна поднятая БД — та же, что и для локального запуска:
 
 ```shell
+docker compose up -d postgres
 pytest
 ```
+
+По умолчанию тесты идут на `postgresql+psycopg://program:test@localhost:5432/persons`. Другой адрес задаётся
+переменной `TEST_DATABASE_URL` — именно так CI подключает свой контейнер с Postgres.
+
+Изоляция обеспечивается не пересозданием схемы, а `TRUNCATE TABLE persons RESTART IDENTITY` перед каждым тестом:
+таблица пустая, счётчик `id` снова начинается с единицы, весь прогон занимает доли секунды.
 
 Интеграционные тесты против локального стека:
 
@@ -119,7 +126,8 @@ npx newman run "postman/[inst] Lab1.postman_collection.json" \
 
 ### Как работает pipeline
 
-1. `checkout` → установка зависимостей → `pytest` (unit-тесты).
+1. `checkout` → установка зависимостей → `pytest` (unit-тесты). Рядом с job'ом GitHub поднимает
+   service-контейнер с Postgres 13 и ждёт `pg_isready`, тесты работают с ним.
 2. `docker build` — проверка, что образ собирается.
 3. `Deploy to Railway` — мутация `serviceInstanceDeployV2` к Public API Railway обычным `curl` (только при
    push в `master`). CLI не используется. Мутации передаётся `commitSha` текущего прогона, поэтому выкатывается

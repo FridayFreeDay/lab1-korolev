@@ -21,6 +21,24 @@ jobs:
   build:
     name: Autograding
     runs-on: ubuntu-latest
+
+    # Postgres поднимается рядом с runner'ом: тесты идут на той же СУБД,
+    # что и в проде, а не на подменённом движке.
+    services:
+      postgres:
+        image: postgres:13
+        env:
+          POSTGRES_USER: program
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: persons
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
     steps:
       - uses: actions/checkout@v4
         with:
@@ -37,6 +55,8 @@ jobs:
         run: pip install --no-cache-dir -r requirements-dev.txt
 
       - name: Run unit tests
+        env:
+          TEST_DATABASE_URL: postgresql+psycopg://program:test@localhost:5432/persons
         run: pytest
 
       - name: Build Docker image
