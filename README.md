@@ -102,10 +102,17 @@ npx newman run "postman/[inst] Lab1.postman_collection.json" \
 
    | Secret                   | Где взять                                                                        |
    |--------------------------|----------------------------------------------------------------------------------|
-   | `RAILWAY_API_TOKEN`      | Account Settings → Tokens → Create Token (account-токен, начинается с `token_`)   |
-   | `RAILWAY_PROJECT_ID`     | из URL проекта: `railway.com/project/<projectId>`                                 |
-   | `RAILWAY_SERVICE_ID`     | из URL сервиса: `.../service/<serviceId>`                                         |
-   | `RAILWAY_ENVIRONMENT_ID` | из query-параметра URL: `?environmentId=<environmentId>`                          |
+   | `RAILWAY_API_TOKEN`      | Account Settings → Tokens → Create Token                                         |
+   | `RAILWAY_SERVICE_ID`     | id сервиса `person-service`                                                      |
+   | `RAILWAY_ENVIRONMENT_ID` | id окружения `production`                                                        |
+
+   Идентификаторы надёжнее взять из самого API, а не из адресной строки:
+
+   ```shell
+   curl -s -X POST https://backboard.railway.com/graphql/v2 \
+     -H "Authorization: Bearer $RAILWAY_API_TOKEN" -H 'Content-Type: application/json' \
+     -d '{"query":"query { projects { edges { node { id name environments { edges { node { id name } } } services { edges { node { id name } } } } } } }"}'
+   ```
 
 7. В [[inst][heroku] Lab1.postman_environment.json](postman/%5Binst%5D%5Bheroku%5D%20Lab1.postman_environment.json)
    заменить `baseUrl` на выданный Railway домен (например `https://person-service-production.up.railway.app`).
@@ -114,8 +121,12 @@ npx newman run "postman/[inst] Lab1.postman_collection.json" \
 
 1. `checkout` → установка зависимостей → `pytest` (unit-тесты).
 2. `docker build` — проверка, что образ собирается.
-3. `Deploy to Railway` — мутация `environmentTriggersDeploy` к Public API Railway обычным `curl` (только при
-   push в `master`). CLI не используется.
+3. `Deploy to Railway` — мутация `serviceInstanceDeployV2` к Public API Railway обычным `curl` (только при
+   push в `master`). CLI не используется. Мутации передаётся `commitSha` текущего прогона, поэтому выкатывается
+   ровно тот коммит, который только что прошёл тесты.
+
+   Мутация `environmentTriggersDeploy` для этой схемы не годится: она запускает триггеры окружения, а при
+   выключенном autodeploy триггеров нет — запрос завершается успешно, но деплой не создаётся.
 4. `Wait for deployed service` — поллинг `/manage/health` до тех пор, пока сервис не вернёт sha текущего коммита
    (Railway прокидывает его в `RAILWAY_GIT_COMMIT_SHA`). Так newman гарантированно бьёт по новой версии,
    а не по старой.

@@ -56,11 +56,10 @@ jobs:
         if: github.event_name == 'push'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
-          RAILWAY_PROJECT_ID: ${{ secrets.RAILWAY_PROJECT_ID }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
           RAILWAY_ENVIRONMENT_ID: ${{ secrets.RAILWAY_ENVIRONMENT_ID }}
         run: |
-          for name in RAILWAY_API_TOKEN RAILWAY_PROJECT_ID RAILWAY_SERVICE_ID RAILWAY_ENVIRONMENT_ID; do
+          for name in RAILWAY_API_TOKEN RAILWAY_SERVICE_ID RAILWAY_ENVIRONMENT_ID; do
             if [ -z "${!name}" ]; then
               echo "::error::Не задан secret ${name}"
               exit 1
@@ -68,12 +67,12 @@ jobs:
           done
 
           payload=$(jq -n \
-            --arg projectId "${RAILWAY_PROJECT_ID}" \
             --arg serviceId "${RAILWAY_SERVICE_ID}" \
             --arg environmentId "${RAILWAY_ENVIRONMENT_ID}" \
+            --arg commitSha "${GITHUB_SHA}" \
             '{
-              query: "mutation Deploy($input: EnvironmentTriggersDeployInput!) { environmentTriggersDeploy(input: $input) }",
-              variables: { input: { projectId: $projectId, serviceId: $serviceId, environmentId: $environmentId } }
+              query: "mutation Deploy($serviceId: String!, $environmentId: String!, $commitSha: String!) { serviceInstanceDeployV2(serviceId: $serviceId, environmentId: $environmentId, commitSha: $commitSha) }",
+              variables: { serviceId: $serviceId, environmentId: $environmentId, commitSha: $commitSha }
             }')
 
           response=$(curl --fail --silent --show-error \
@@ -86,7 +85,13 @@ jobs:
             echo "::error::Railway отклонил запрос на деплой: $(echo "${response}" | jq -c '.errors')"
             exit 1
           fi
-          echo "Деплой запущен"
+
+          deployment_id=$(echo "${response}" | jq -r '.data.serviceInstanceDeployV2 // ""')
+          if [ -z "${deployment_id}" ]; then
+            echo "::error::Railway не создал деплой: ${response}"
+            exit 1
+          fi
+          echo "Запущен деплой ${deployment_id} для коммита ${GITHUB_SHA}"
 
       - name: Wait for deployed service
         env:
