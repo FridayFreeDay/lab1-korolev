@@ -7,7 +7,7 @@ on:
   pull_request:
     branches:
       - master
-    workflow_dispatch:
+  workflow_dispatch:
 env:
   PYTHON_VERSION: "3.12"
   IMAGE_NAME: person-service
