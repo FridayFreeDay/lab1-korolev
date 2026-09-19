@@ -7,7 +7,7 @@ on:
   pull_request:
     branches:
       - master
-  workflow_dispatch:
+
 env:
   PYTHON_VERSION: "3.12"
   IMAGE_NAME: person-service
@@ -64,7 +64,6 @@ jobs:
 
       - name: Read service base url
         id: service
-        if: github.event_name == 'workflow_dispatch'
         run: |
           base_url=$(jq -r '.values[] | select(.key == "baseUrl") | .value' "${POSTMAN_ENVIRONMENT}")
           if [ -z "${base_url}" ] || [ "${base_url}" = "null" ]; then
@@ -74,7 +73,6 @@ jobs:
           echo "base_url=${base_url%/}" >> "${GITHUB_OUTPUT}"
 
       - name: Deploy to Railway
-        if: github.event_name == 'workflow_dispatch'
         env:
           RAILWAY_API_TOKEN: ${{ secrets.RAILWAY_API_TOKEN }}
           RAILWAY_SERVICE_ID: ${{ secrets.RAILWAY_SERVICE_ID }}
@@ -115,10 +113,9 @@ jobs:
           echo "Запущен деплой ${deployment_id} для коммита ${GITHUB_SHA}"
 
       - name: Wait for deployed service
-        if: github.event_name == 'workflow_dispatch'
         env:
           BASE_URL: ${{ steps.service.outputs.base_url }}
-          EXPECTED_COMMIT: ${{ github.sha }}
+          EXPECTED_COMMIT: ${{ github.event_name == 'push' && github.sha || '' }}
         run: |
           health_url="${BASE_URL}${HEALTH_PATH}"
           deadline=$(( $(date +%s) + HEALTH_TIMEOUT_SECONDS ))
@@ -146,7 +143,6 @@ jobs:
           done
 
       - name: Run API Tests
-        if: github.event_name == 'workflow_dispatch'
         uses: matt-ball/newman-action@master
         with:
           collection: postman/[inst] Lab1.postman_collection.json
@@ -155,12 +151,10 @@ jobs:
           reporters: '[ "cli" ]'
 
       - name: Autograding
-        if: github.event_name == 'workflow_dispatch'
         uses: education/autograding@v1
         continue-on-error: true
 
       - name: Github auto grader mark
-        if: github.event_name == 'workflow_dispatch'
         uses: Romanow/google-sheet-autograder-marker@v1.0
         with:
           google_token: ${{secrets.GOOGLE_API_KEY}}
